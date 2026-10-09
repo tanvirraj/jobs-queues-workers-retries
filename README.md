@@ -4,7 +4,7 @@
 
 *A hands-on guide in ten chapters and nine exercises. It assumes you know nothing about the topic and a little Python.*
 
-> There is an interactive version of this guide in [`guide.html`](./guide.html). Open it in a browser. It has the same text, plus simulations you can poke at: a live queue with workers you can kill, a race condition you can step through, a crash-timing explorer, and a payment simulator. (It is generated from this file: after editing, run `python3 tools/build.py`, which needs [pandoc](https://pandoc.org).)
+> **Read the interactive version online: https://tanvirraj.github.io/jobs-queues-workers-retries/** (or open [`guide.html`](./guide.html) locally in a browser). It has the same text, plus simulations you can poke at: a live queue with workers you can kill, a race condition you can step through, a crash-timing explorer, and a payment simulator. (It is generated from this file: after editing, run `python3 tools/build.py`, which needs [pandoc](https://pandoc.org).)
 
 ---
 
