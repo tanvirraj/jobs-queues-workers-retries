@@ -1,0 +1,788 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Jobs, Queues, Workers</title>
+<meta name="description" content="A hands-on, build-it-yourself guide to jobs, queues, workers, retries, and idempotency, with interactive simulations.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #fbfaf7;
+  --bg-soft: #f3f1ea;
+  --card: #ffffff;
+  --ink: #1f2328;
+  --ink-soft: #57606a;
+  --ink-faint: #8c959f;
+  --line: #e3dfd3;
+  --accent: #2f5bd3;
+  --accent-soft: #e8eefc;
+  --good: #1a7f37;
+  --good-soft: #dcf5e3;
+  --bad: #cf222e;
+  --bad-soft: #fde4e4;
+  --warn: #9a6700;
+  --warn-soft: #fff1c9;
+  --code-bg: #f6f4ee;
+  --diagram-ink: #2b3036;
+  --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 18px rgba(0,0,0,.05);
+  --tok-kw: #a626a4; --tok-st: #2c7a39; --tok-co: #8b8f96; --tok-num: #b35900;
+  --tok-fn: #2f5bd3; --tok-bu: #0e7490;
+  --serif: "Source Serif 4", Georgia, "Times New Roman", serif;
+  --sans: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #14161a; --bg-soft: #1b1e23; --card: #1d2026; --ink: #e6e6e3; --ink-soft: #a5abb3;
+    --ink-faint: #737a83; --line: #2e333b; --accent: #7aa2ff; --accent-soft: #1f2a44;
+    --good: #4ac26b; --good-soft: #15301f; --bad: #ff7b72; --bad-soft: #3a1d1d;
+    --warn: #e3b341; --warn-soft: #3a2f12; --code-bg: #181b20; --diagram-ink: #d5d9de;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 22px rgba(0,0,0,.25);
+    --tok-kw: #d2a8ff; --tok-st: #7ee787; --tok-co: #7d8590; --tok-num: #ffa657;
+    --tok-fn: #79c0ff; --tok-bu: #56d4dd;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #14161a; --bg-soft: #1b1e23; --card: #1d2026; --ink: #e6e6e3; --ink-soft: #a5abb3;
+  --ink-faint: #737a83; --line: #2e333b; --accent: #7aa2ff; --accent-soft: #1f2a44;
+  --good: #4ac26b; --good-soft: #15301f; --bad: #ff7b72; --bad-soft: #3a1d1d;
+  --warn: #e3b341; --warn-soft: #3a2f12; --code-bg: #181b20; --diagram-ink: #d5d9de;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 6px 22px rgba(0,0,0,.25);
+  --tok-kw: #d2a8ff; --tok-st: #7ee787; --tok-co: #7d8590; --tok-num: #ffa657;
+  --tok-fn: #79c0ff; --tok-bu: #56d4dd;
+}
+
+* { box-sizing: border-box; }
+html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+body {
+  margin: 0; background: var(--bg); color: var(--ink);
+  font-family: var(--serif); font-size: 19px; line-height: 1.65;
+}
+#progress { position: fixed; top: 0; left: 0; height: 3px; width: 0; background: var(--accent); z-index: 50; }
+
+/* ---------- layout ---------- */
+.shell { display: grid; grid-template-columns: 270px minmax(0, 1fr); max-width: 1180px; margin: 0 auto; }
+nav.toc {
+  position: sticky; top: 0; height: 100vh; overflow-y: auto; padding: 36px 18px 36px 24px;
+  font-family: var(--sans); font-size: 13.5px; border-right: 1px solid var(--line);
+}
+nav.toc .brand { font-weight: 700; font-size: 14px; letter-spacing: .01em; margin-bottom: 18px; color: var(--ink); }
+nav.toc .brand small { display: block; font-weight: 400; color: var(--ink-faint); margin-top: 2px; }
+nav.toc ol { list-style: none; margin: 0; padding: 0; }
+nav.toc a { display: block; padding: 6px 10px; border-radius: 7px; color: var(--ink-soft); text-decoration: none; line-height: 1.35; }
+nav.toc a:hover { background: var(--bg-soft); color: var(--ink); }
+nav.toc a.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+nav.toc .tools { margin-top: 22px; display: flex; gap: 8px; }
+main { padding: 48px 56px 120px; min-width: 0; }
+article { max-width: 760px; margin: 0 auto; }
+.mobilebar { display: none; }
+
+@media (max-width: 920px) {
+  .shell { display: block; }
+  nav.toc { position: fixed; inset: 0 auto 0 0; width: 280px; background: var(--bg); z-index: 40; transform: translateX(-100%); transition: transform .25s ease; box-shadow: var(--shadow); }
+  nav.toc.open { transform: none; }
+  .mobilebar { display: flex; position: sticky; top: 0; z-index: 30; align-items: center; justify-content: space-between; padding: 10px 16px; background: color-mix(in srgb, var(--bg) 92%, transparent); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); font-family: var(--sans); font-size: 14px; font-weight: 600; }
+  main { padding: 24px 16px 96px; }
+  body { font-size: 17.5px; }
+}
+
+/* ---------- typography ---------- */
+h1, h2, h3, h4, h5 { font-family: var(--sans); line-height: 1.25; letter-spacing: -.01em; }
+h1 { font-size: 2.3em; margin: .2em 0 .1em; letter-spacing: -.025em; }
+h1 + h3 { font-weight: 500; color: var(--ink-soft); margin-top: 0; font-size: 1.1em; }
+h2 { font-size: 1.6em; margin: 2.6em 0 .6em; padding-top: .6em; scroll-margin-top: 70px; }
+h3 { font-size: 1.2em; margin: 2em 0 .5em; scroll-margin-top: 70px; }
+h4 { font-size: 1em; margin: 1.8em 0 .4em; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
+h2 .num { color: var(--accent); margin-right: .35em; }
+p { margin: 0 0 1.05em; }
+a { color: var(--accent); text-underline-offset: 2px; }
+strong { font-weight: 700; }
+hr { border: none; border-top: 1px solid var(--line); margin: 3em 0; }
+code { font-family: var(--mono); font-size: .82em; background: var(--code-bg); padding: .12em .35em; border-radius: 5px; border: 1px solid var(--line); }
+pre { font-family: var(--mono); font-size: 13.5px; line-height: 1.5; background: var(--code-bg); border: 1px solid var(--line); border-radius: 10px; padding: 16px 18px; overflow-x: auto; margin: 1.2em 0 1.4em; position: relative; }
+pre code { background: none; border: none; padding: 0; font-size: inherit; }
+pre.diagram { background: transparent; border: 1px dashed var(--line); color: var(--diagram-ink); }
+pre.terminal { background: #0f1115; color: #d7dae0; border-color: #0f1115; }
+pre.terminal .prompt { color: #7ee787; }
+div.sourceCode { margin: 1.2em 0 1.4em; }
+div.sourceCode pre { margin: 0; }
+.copy { position: absolute; top: 8px; right: 8px; font-family: var(--sans); font-size: 11.5px; padding: 3px 9px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); color: var(--ink-soft); cursor: pointer; opacity: 0; transition: opacity .15s; }
+pre:hover .copy, .copy:focus { opacity: 1; }
+@media (hover: none) { .copy { opacity: 1; } }
+.kw, .cf, .im { color: var(--tok-kw); } .st, .ss, .ch, .sc { color: var(--tok-st); } .co { color: var(--tok-co); font-style: italic; }
+.dv, .fl, .dt { color: var(--tok-num); } .fu { color: var(--tok-fn); } .bu, .ex { color: var(--tok-bu); } .at, .va { color: var(--tok-fn); }
+
+table { border-collapse: collapse; width: 100%; font-family: var(--sans); font-size: 14.5px; margin: 1.2em 0; display: block; overflow-x: auto; }
+th, td { text-align: left; border-bottom: 1px solid var(--line); padding: 8px 10px; vertical-align: top; }
+th { color: var(--ink-soft); font-weight: 600; }
+
+blockquote { margin: 1.5em 0; padding: 4px 20px; border-left: 3px solid var(--line); color: var(--ink-soft); }
+blockquote.check { border: 1px solid var(--line); border-left: 4px solid var(--accent); background: var(--card); border-radius: 10px; padding: 18px 22px 8px; color: var(--ink); box-shadow: var(--shadow); }
+blockquote.check > p:first-child strong:first-child { font-family: var(--sans); font-size: .82em; text-transform: uppercase; letter-spacing: .07em; color: var(--accent); display: block; margin-bottom: 4px; }
+details { margin: 10px 0 14px; border-top: 1px dashed var(--line); padding-top: 10px; }
+summary { cursor: pointer; font-family: var(--sans); font-size: 14px; font-weight: 600; color: var(--accent); list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+summary::-webkit-details-marker { display: none; }
+summary::before { content: "▸"; transition: transform .15s; display: inline-block; }
+details[open] summary::before { transform: rotate(90deg); }
+details[open] summary { margin-bottom: 8px; }
+.hero-note { font-family: var(--sans); font-size: 14px; background: var(--accent-soft); color: var(--ink); border-radius: 10px; padding: 12px 16px; border: none; }
+
+/* ---------- buttons & widgets ---------- */
+button, select { font-family: var(--sans); font-size: 13.5px; }
+.btn { border: 1px solid var(--line); background: var(--card); color: var(--ink); padding: 7px 13px; border-radius: 8px; cursor: pointer; font-weight: 500; transition: background .15s, border-color .15s, transform .05s; }
+.btn:hover { border-color: var(--accent); }
+.btn:active { transform: translateY(1px); }
+.btn.primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn.danger { color: var(--bad); }
+.btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: .45; cursor: not-allowed; }
+
+.widget { font-family: var(--sans); font-size: 14.5px; line-height: 1.5; background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 20px 22px 22px; margin: 2em 0 2.2em; box-shadow: var(--shadow); }
+.w-tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); background: var(--accent-soft); padding: 3px 8px; border-radius: 999px; }
+.widget h4 { margin: 8px 0 4px; text-transform: none; letter-spacing: -.005em; color: var(--ink); font-size: 17px; }
+.widget .w-intro { color: var(--ink-soft); margin: 0 0 14px; font-size: 14px; }
+.w-controls { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 14px; }
+.w-controls label { display: inline-flex; gap: 6px; align-items: center; color: var(--ink-soft); font-size: 13px; }
+.w-controls input[type=range] { width: 110px; accent-color: var(--accent); }
+.w-controls .sep { width: 1px; height: 22px; background: var(--line); margin: 0 4px; }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
+.seg button { border: none; background: var(--card); color: var(--ink-soft); padding: 7px 11px; cursor: pointer; border-right: 1px solid var(--line); }
+.seg button:last-child { border-right: none; }
+.seg button.on { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.pill { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; font-weight: 600; padding: 2px 9px; border-radius: 999px; background: var(--bg-soft); color: var(--ink-soft); white-space: nowrap; }
+.pill.good { background: var(--good-soft); color: var(--good); }
+.pill.bad { background: var(--bad-soft); color: var(--bad); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.blue { background: var(--accent-soft); color: var(--accent); }
+.mono { font-family: var(--mono); font-size: 12.5px; }
+.muted { color: var(--ink-faint); }
+.stats { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 12px; }
+.stat { background: var(--bg-soft); border-radius: 10px; padding: 8px 12px; min-width: 104px; }
+.stat b { display: block; font-size: 20px; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 12px; color: var(--ink-soft); }
+.stat.bad b { color: var(--bad); } .stat.good b { color: var(--good); }
+.verdict { margin-top: 14px; padding: 12px 14px; border-radius: 10px; background: var(--bg-soft); }
+.verdict.good { background: var(--good-soft); } .verdict.bad { background: var(--bad-soft); } .verdict.warn { background: var(--warn-soft); }
+
+/* waiter */
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 640px) { .two { grid-template-columns: 1fr; } }
+.lane { border: 1px solid var(--line); border-radius: 10px; padding: 12px; background: var(--bg); min-width: 0; }
+.lane h5 { margin: 0 0 8px; font-size: 13px; }
+.queue-row { display: flex; gap: 5px; flex-wrap: wrap; min-height: 30px; align-items: center; }
+.guest { width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; background: var(--warn-soft); color: var(--warn); }
+.ticket { padding: 3px 7px; border-radius: 5px; font-size: 11px; font-family: var(--mono); background: var(--accent-soft); color: var(--accent); border: 1px dashed var(--accent); }
+.ticket.cooking { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+.bar { height: 6px; background: var(--bg-soft); border-radius: 99px; overflow: hidden; margin: 8px 0; }
+.bar > i { display: block; height: 100%; width: 0; background: var(--accent); }
+.minilog { list-style: none; padding: 0; margin: 8px 0 0; font-size: 12.5px; max-height: 150px; overflow-y: auto; }
+.minilog li { padding: 3px 0; border-top: 1px dashed var(--line); display: flex; justify-content: space-between; gap: 8px; }
+
+/* sorter */
+.sorter-item { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; background: var(--bg); }
+.sorter-item pre { margin: 0 0 8px; padding: 8px 10px; font-size: 12px; }
+.sorter-item .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.sorter-item .why { margin-top: 8px; font-size: 13.5px; }
+
+/* race */
+.race-table { width: 100%; display: table; font-size: 13px; margin: 0; }
+.race-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px; }
+@media (max-width: 640px) { .race-grid { grid-template-columns: 1fr; } }
+.racelog { list-style: none; margin: 6px 0 0; padding: 0; font-family: var(--mono); font-size: 12px; min-height: 120px; }
+.racelog li { padding: 4px 6px; border-radius: 6px; margin-bottom: 3px; background: var(--bg-soft); }
+.racelog li.hot { background: var(--bad-soft); color: var(--bad); }
+.racelog li.new { outline: 2px solid var(--accent); }
+.narr { margin-top: 12px; padding: 10px 12px; border-left: 3px solid var(--accent); background: var(--accent-soft); border-radius: 0 8px 8px 0; min-height: 44px; }
+.st-queued { color: var(--ink-soft); } .st-running { color: var(--warn); font-weight: 600; } .st-done { color: var(--good); font-weight: 600; } .st-dead { color: var(--bad); font-weight: 600; }
+
+/* svg chart */
+.chart { width: 100%; height: auto; display: block; }
+.chart text { font-family: var(--sans); font-size: 11px; fill: var(--ink-faint); }
+
+/* crash timeline */
+.tl { display: flex; align-items: stretch; gap: 0; margin: 10px 0 6px; overflow-x: auto; padding-bottom: 6px; }
+.tl .step { flex: 1 0 96px; text-align: center; padding: 10px 6px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); font-size: 12.5px; position: relative; }
+.tl .step.done { background: var(--good-soft); border-color: transparent; }
+.tl .step.never { opacity: .4; }
+.tl .gap { flex: 0 0 34px; display: grid; place-items: center; cursor: pointer; border-radius: 8px; font-size: 16px; color: var(--ink-faint); }
+.tl .gap:hover { background: var(--bad-soft); }
+.tl .gap.crash { background: var(--bad); color: #fff; }
+.truth { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; align-items: center; font-size: 12.5px; }
+
+/* payment grid */
+.pgrid { display: grid; grid-template-columns: repeat(20, 1fr); gap: 3px; margin-top: 12px; }
+.pgrid i { aspect-ratio: 1; border-radius: 3px; background: var(--good); opacity: .85; }
+.pgrid i.lost { background: var(--ink-faint); opacity: .5; }
+.pgrid i.dup { background: var(--bad); opacity: 1; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12.5px; color: var(--ink-soft); margin-top: 8px; }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+
+/* queue simulator */
+.sim { display: grid; grid-template-columns: 1.1fr 1.3fr 1fr; gap: 12px; }
+@media (max-width: 760px) { .sim { grid-template-columns: 1fr; } }
+.sim .col { border: 1px solid var(--line); border-radius: 10px; padding: 10px; background: var(--bg); min-width: 0; }
+.sim .col h5 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .07em; color: var(--ink-soft); }
+.jobchips { display: flex; flex-wrap: wrap; gap: 5px; }
+.chip { font-family: var(--mono); font-size: 11px; padding: 3px 6px; border-radius: 6px; border: 1px solid var(--line); background: var(--card); }
+.chip.running { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); }
+.chip.done { background: var(--good-soft); border-color: transparent; color: var(--good); }
+.chip.stuck { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); }
+.wcard { border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; margin-bottom: 8px; background: var(--card); }
+.wcard.dead { background: var(--bad-soft); border-color: var(--bad); }
+.wcard .top { display: flex; justify-content: space-between; align-items: center; gap: 6px; font-size: 12.5px; }
+.wcard .sub { font-size: 12px; color: var(--ink-soft); margin-top: 4px; min-height: 18px; }
+.wcard .bar { margin: 6px 0 2px; }
+.wcard .lease { height: 3px; background: var(--bg-soft); border-radius: 99px; overflow: hidden; }
+.wcard .lease > i { display: block; height: 100%; background: var(--warn); }
+.inbox { display: grid; grid-template-columns: repeat(auto-fill, minmax(70px, 1fr)); gap: 5px; }
+.inbox div { font-family: var(--mono); font-size: 11px; padding: 4px 6px; border-radius: 6px; background: var(--card); border: 1px solid var(--line); display: flex; justify-content: space-between; }
+.inbox div.one { background: var(--good-soft); border-color: transparent; color: var(--good); }
+.inbox div.many { background: var(--bad-soft); border-color: var(--bad); color: var(--bad); font-weight: 700; }
+.events { font-family: var(--mono); font-size: 11.5px; max-height: 110px; overflow-y: auto; margin-top: 10px; padding: 6px 8px; border-radius: 8px; background: var(--bg-soft); color: var(--ink-soft); }
+.events div.bad { color: var(--bad); } .events div.good { color: var(--good); }
+
+.footer { margin-top: 5em; font-family: var(--sans); font-size: 13px; color: var(--ink-faint); text-align: center; }
+@media (prefers-reduced-motion: reduce) { html { scroll-behavior: auto; } * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div id="progress"></div>
+<div class="mobilebar"><button class="btn" id="menuBtn" aria-label="Open contents">☰ Contents</button><span>Jobs · Queues · Workers</span><button class="btn" data-theme-toggle aria-label="Toggle theme">◐</button></div>
+<div class="shell">
+  <nav class="toc" id="toc">
+    <div class="brand">Jobs, Queues, Workers &amp; Retries<small>A build-it-yourself guide</small></div>
+    <ol id="tocList"></ol>
+    <div class="tools"><button class="btn" data-theme-toggle>◐ Theme</button></div>
+  </nav>
+  <main>
+    <article id="content">
+{{CONTENT}}
+    </article>
+    <div class="footer">Code for every exercise lives in the <code>code/</code> folder next to this file.</div>
+  </main>
+</div>
+
+<script>
+(function () {
+"use strict";
+
+/* ===================== page chrome ===================== */
+const root = document.documentElement;
+function safeGet(k) { try { return localStorage.getItem(k); } catch (e) { return null; } }
+function safeSet(k, v) { try { localStorage.setItem(k, v); } catch (e) {} }
+const saved = safeGet("jq-theme");
+if (saved) root.setAttribute("data-theme", saved);
+document.querySelectorAll("[data-theme-toggle]").forEach(b => b.addEventListener("click", () => {
+  const dark = root.getAttribute("data-theme") ? root.getAttribute("data-theme") === "dark"
+    : matchMedia("(prefers-color-scheme: dark)").matches;
+  const next = dark ? "light" : "dark";
+  root.setAttribute("data-theme", next); safeSet("jq-theme", next);
+}));
+
+const content = document.getElementById("content");
+
+// Callouts: "Pause and Check" blockquotes; the hero note.
+content.querySelectorAll("blockquote").forEach(bq => {
+  const s = bq.querySelector("p > strong");
+  if (s && /^Pause and Check/.test(s.textContent)) bq.classList.add("check");
+  else if (/guide\.html/.test(bq.textContent)) bq.remove();
+});
+// Remove the markdown's own table of contents (the sidebar replaces it).
+const tocH = document.getElementById("table-of-contents");
+if (tocH) { let n = tocH.nextElementSibling; while (n && n.tagName !== "HR") { const x = n.nextElementSibling; n.remove(); n = x; } if (n) n.remove(); tocH.remove(); }
+
+// Classify plain <pre> blocks: terminals ($ prompt) vs. ASCII diagrams.
+content.querySelectorAll("pre").forEach(pre => {
+  if (pre.classList.contains("sourceCode")) return;
+  const t = pre.textContent;
+  if (/^\$ /m.test(t)) {
+    pre.classList.add("terminal");
+    pre.querySelector("code").innerHTML = pre.querySelector("code").innerHTML.replace(/^(\$ )(.*)$/gm, '<span class="prompt">$1</span>$2');
+  } else if (/[─│┌└▶▼◀▲═╲╱█]/.test(t)) {
+    pre.classList.add("diagram");
+  }
+});
+// Copy buttons on code (not diagrams).
+content.querySelectorAll("pre").forEach(pre => {
+  if (pre.classList.contains("diagram")) return;
+  const b = document.createElement("button"); b.className = "copy"; b.textContent = "copy";
+  b.addEventListener("click", () => {
+    const text = pre.querySelector("code").innerText;
+    (navigator.clipboard ? navigator.clipboard.writeText(text) : Promise.reject()).then(
+      () => { b.textContent = "copied"; setTimeout(() => b.textContent = "copy", 1200); },
+      () => { b.textContent = "select & copy"; });
+  });
+  pre.appendChild(b);
+});
+
+// Sidebar TOC from h2s, with scroll spy.
+const tocList = document.getElementById("tocList");
+const h2s = [...content.querySelectorAll("h2")];
+h2s.forEach(h => {
+  const m = h.textContent.match(/^(\d+)\.\s*(.*)$/);
+  if (m) h.innerHTML = `<span class="num">${m[1]}</span>` + h.innerHTML.replace(/^\d+\.\s*/, "");
+  const li = document.createElement("li");
+  li.innerHTML = `<a href="#${h.id}">${m ? m[1] + ". " + m[2] : h.textContent}</a>`;
+  tocList.appendChild(li);
+});
+const tocLinks = [...tocList.querySelectorAll("a")];
+const nav = document.getElementById("toc");
+document.getElementById("menuBtn").addEventListener("click", () => nav.classList.toggle("open"));
+tocLinks.forEach(a => a.addEventListener("click", () => nav.classList.remove("open")));
+const bar = document.getElementById("progress");
+function onScroll() {
+  const max = document.documentElement.scrollHeight - innerHeight;
+  bar.style.width = (100 * scrollY / Math.max(1, max)) + "%";
+  let cur = 0;
+  h2s.forEach((h, i) => { if (h.getBoundingClientRect().top < 140) cur = i; });
+  tocLinks.forEach((a, i) => a.classList.toggle("active", i === cur));
+}
+addEventListener("scroll", onScroll, { passive: true }); onScroll();
+
+/* ===================== helpers ===================== */
+function h(html) { const t = document.createElement("template"); t.innerHTML = html.trim(); return t.content.firstElementChild; }
+function rng(seed) { let s = seed >>> 0 || 1; return () => { s ^= s << 13; s >>>= 0; s ^= s >>> 17; s ^= s << 5; s >>>= 0; return s / 4294967296; }; }
+function head(tag, title, intro) { return `<span class="w-tag">${tag}</span><h4>${title}</h4><p class="w-intro">${intro}</p>`; }
+function esc(s) { return String(s).replace(/[&<>]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" }[c])); }
+function seg(el, onChange) {
+  el.querySelectorAll("button").forEach(b => b.addEventListener("click", () => {
+    el.querySelectorAll("button").forEach(x => x.classList.toggle("on", x === b)); onChange(b.dataset.v);
+  }));
+}
+
+/* ===================== widget: waiter ===================== */
+function waiter(el) {
+  el.innerHTML = head("Interactive", "The waiter who cooks vs. the ticket rail",
+    "Every order takes 2 seconds to cook. Click <b>A guest arrives</b> a few times quickly, or send a rush. Compare how long each guest waits just to hear <i>“got it!”</i>.") + `
+    <div class="w-controls"><button class="btn primary" data-a="one">A guest arrives</button><button class="btn" data-a="rush">Rush: 5 guests</button><button class="btn" data-a="reset">Reset</button></div>
+    <div class="two">
+      <div class="lane"><h5>Synchronous: the waiter cooks</h5><div class="muted" style="font-size:12px">Guests waiting at the door</div><div class="queue-row" data-k="door"></div><div class="bar"><i data-k="sbar"></i></div><ul class="minilog" data-k="slog"></ul></div>
+      <div class="lane"><h5>With a queue: the ticket rail</h5><div class="muted" style="font-size:12px">Tickets on the rail</div><div class="queue-row" data-k="rail"></div><div class="bar"><i data-k="qbar"></i></div><ul class="minilog" data-k="qlog"></ul></div>
+    </div>`;
+  const $ = k => el.querySelector(`[data-k="${k}"]`);
+  const COOK = 2000;
+  let n, sync, rail, timer;
+  function reset() { n = 0; sync = { wait: [], cur: null }; rail = { wait: [], cur: null }; $("slog").innerHTML = ""; $("qlog").innerHTML = ""; render(); }
+  function log(k, html) { $(k).insertAdjacentHTML("afterbegin", `<li>${html}</li>`); }
+  function arrive() {
+    const g = { id: ++n, t: performance.now() };
+    sync.wait.push(g);
+    rail.wait.push({ ...g });
+    log("qlog", `<span>Guest ${g.id}: “got it!”</span><span class="pill good">0.00 s</span>`);
+    tick();
+  }
+  function step(lane, now, onDone) {
+    if (!lane.cur && lane.wait.length) { lane.cur = lane.wait.shift(); lane.cur.start = now; }
+    if (lane.cur && now - lane.cur.start >= COOK) { onDone(lane.cur, now); lane.cur = null; step(lane, now, onDone); }
+  }
+  function tick() {
+    const now = performance.now();
+    step(sync, now, (g, t) => { const w = (t - g.t) / 1000; log("slog", `<span>Guest ${g.id}: “got it!”</span><span class="pill ${w > 3 ? "bad" : "warn"}">${w.toFixed(2)} s</span>`); });
+    step(rail, now, (g, t) => { log("qlog", `<span class="muted">… food for guest ${g.id} ready</span><span class="muted">${((t - g.t) / 1000).toFixed(1)} s</span>`); });
+    render(now);
+    clearTimeout(timer);
+    if (sync.cur || rail.cur) timer = setTimeout(tick, 50);
+  }
+  function render(now) {
+    now = now || performance.now();
+    const door = [...(sync.cur ? [sync.cur] : []), ...sync.wait];
+    $("door").innerHTML = door.map((g, i) => `<span class="guest" title="guest ${g.id}" style="${i === 0 ? "outline:2px solid var(--warn)" : ""}">${g.id}</span>`).join("") || '<span class="muted" style="font-size:12px">nobody waiting</span>';
+    const tix = [...(rail.cur ? [rail.cur] : []), ...rail.wait];
+    $("rail").innerHTML = tix.map((g, i) => `<span class="ticket ${i === 0 ? "cooking" : ""}">#${g.id}</span>`).join("") || '<span class="muted" style="font-size:12px">rail empty</span>';
+    $("sbar").style.width = sync.cur ? Math.min(100, (now - sync.cur.start) / COOK * 100) + "%" : 0;
+    $("qbar").style.width = rail.cur ? Math.min(100, (now - rail.cur.start) / COOK * 100) + "%" : 0;
+  }
+  el.addEventListener("click", e => {
+    const a = e.target.dataset.a; if (!a) return;
+    if (a === "one") arrive();
+    if (a === "rush") for (let i = 0; i < 5; i++) arrive();
+    if (a === "reset") { clearTimeout(timer); reset(); }
+  });
+  reset();
+}
+
+/* ===================== widget: job anatomy (sorter) ===================== */
+function jobAnatomy(el) {
+  const items = [
+    ['{"kind": "send_welcome_email", "args": {"user_id": 42}}', true, "Good. Small, plain data, and it carries a <b>reference</b>. The worker looks up the current email address when it runs."],
+    ['{"kind": "send_welcome_email", "args": {"user": <User object at 0x10a3f>}}', false, "Bad. A live Python object cannot be turned into text, so this cannot be stored or sent anywhere. It is not really a message."],
+    ['{"kind": "send_report", "args": {"pdf_bytes": "JVBERi0xLjcK… (14 MB)"}}', false, "Bad. Jobs should be small. Store the PDF somewhere (a file store, a table) and put its <b>id</b> in the job."],
+    ['{"kind": "charge_card", "args": {"customer_id": 7, "amount_cents": 1000, "order_id": 9001}}', true, "Good, and that <code>order_id</code> is quietly the most important field here. In Chapter 8 it becomes the idempotency key that stops double charges."],
+    ['{"kind": "sync", "args": {"db": "<open connection, socket fd 12>"}}', false, "Bad. A connection only means something inside the process that opened it. The worker must open its own."],
+    ['{"kind": "email_price_drop", "args": {"product_id": 5, "price_seen_cents": 1999}}', true, "Good. This one carries a <b>snapshot</b> on purpose: the price at the moment the user looked. Snapshots are fine when you choose them consciously."],
+  ];
+  el.innerHTML = head("Try it", "Good ticket or bad ticket?", "Six jobs a colleague wrote. Decide whether each one is a good job message.") +
+    items.map((it, i) => `<div class="sorter-item" data-i="${i}"><pre><code>${esc(it[0])}</code></pre><div class="row"><button class="btn" data-g="1">👍 Good job</button><button class="btn" data-g="0">👎 Bad job</button><span data-r></span></div><div class="why" hidden></div></div>`).join("") +
+    `<div class="stats"><div class="stat"><b data-score>0 / 6</b><span>correct</span></div></div>`;
+  let score = 0, answered = 0;
+  el.addEventListener("click", e => {
+    const g = e.target.dataset.g; if (g === undefined) return;
+    const box = e.target.closest(".sorter-item"); if (box.dataset.done) return;
+    box.dataset.done = 1; answered++;
+    const it = items[+box.dataset.i]; const right = (g === "1") === it[1];
+    if (right) score++;
+    box.querySelector("[data-r]").innerHTML = right ? '<span class="pill good">✓ right</span>' : '<span class="pill bad">✗ not quite</span>';
+    const why = box.querySelector(".why"); why.innerHTML = it[2]; why.hidden = false;
+    box.querySelectorAll("button").forEach(b => b.disabled = true);
+    el.querySelector("[data-score]").textContent = `${score} / ${answered}`;
+  });
+}
+
+/* ===================== widget: race ===================== */
+function race(el) {
+  el.innerHTML = head("Step through it", "Two workers, one job: watch the race",
+    "Press <b>Step</b> to advance one instruction at a time. Each worker's lane shows what it executed. Then switch to the atomic claim and do it again.") + `
+    <div class="w-controls"><div class="seg" data-k="mode"><button class="on" data-v="naive">Naive: SELECT, then UPDATE</button><button data-v="atomic">Atomic: one UPDATE … RETURNING</button></div>
+    <button class="btn primary" data-a="step">Step ▸</button><button class="btn" data-a="play">Play all</button><button class="btn" data-a="reset">Reset</button></div>
+    <table class="race-table"><thead><tr><th>job id</th><th>args</th><th>status</th><th>worker</th></tr></thead><tbody data-k="rows"></tbody></table>
+    <div class="race-grid"><div class="lane"><h5>Worker A</h5><ul class="racelog" data-k="A"></ul></div><div class="lane"><h5>Worker B</h5><ul class="racelog" data-k="B"></ul></div></div>
+    <div class="lane" style="margin-top:12px"><h5>outbox.txt</h5><div class="mono" data-k="out"></div></div>
+    <div class="narr" data-k="narr"></div>`;
+  const $ = k => el.querySelector(`[data-k="${k}"]`);
+  let mode = "naive", i, st, timer;
+  const scripts = {
+    naive: [
+      ["A", "SELECT … WHERE status='queued' LIMIT 1  → job 1", s => { s.A = 1; }, "Worker A <b>looks</b> and sees job 1 is queued. It has not grabbed it yet."],
+      ["B", "SELECT … WHERE status='queued' LIMIT 1  → job 1", s => { s.B = 1; }, "Worker B looks too, a moment later. Job 1 is <b>still</b> marked queued, because A only looked. B sees the same job.", true],
+      ["A", "UPDATE jobs SET status='running', worker='A' WHERE id=1", s => { s.jobs[0].status = "running"; s.jobs[0].worker = "A"; }, "A grabs job 1."],
+      ["B", "UPDATE jobs SET status='running', worker='B' WHERE id=1", s => { s.jobs[0].worker = "B"; }, "B grabs job 1 too, silently overwriting A's claim. Neither worker knows anything is wrong.", true],
+      ["A", "send_welcome_email('ada@…')", s => { s.out.push("welcome email -> ada@example.com   (A)"); }, "A sends Ada her welcome email."],
+      ["B", "send_welcome_email('ada@…')", s => { s.out.push("welcome email -> ada@example.com   (B)"); }, "B sends Ada her welcome email. <b>Again.</b>", true],
+      ["A", "UPDATE jobs SET status='done' WHERE id=1", s => { s.jobs[0].status = "done"; }, "Both mark job 1 done. Job 2 is still waiting, and Ada has two emails. This is a <b>check-then-act</b> race."],
+    ],
+    atomic: [
+      ["A", "UPDATE … WHERE id=(SELECT … queued LIMIT 1) RETURNING  → job 1", s => { s.jobs[0].status = "running"; s.jobs[0].worker = "A"; }, "A looks <b>and</b> grabs in one indivisible statement. While it runs, A holds the database's write lock."],
+      ["B", "UPDATE … WHERE id=(SELECT … queued LIMIT 1) RETURNING  → job 2", s => { s.jobs[1].status = "running"; s.jobs[1].worker = "B"; }, "B's identical statement runs after A's. Job 1 is no longer 'queued', so the WHERE clause skips it and B gets job 2."],
+      ["A", "send_welcome_email('ada@…')", s => { s.out.push("welcome email -> ada@example.com   (A)"); }, "A sends Ada's email."],
+      ["B", "send_welcome_email('alan@…')", s => { s.out.push("welcome email -> alan@example.com  (B)"); }, "B sends Alan's email. Different job, different customer."],
+      ["A", "UPDATE jobs SET status='done' WHERE id=1", s => { s.jobs[0].status = "done"; s.jobs[1].status = "done"; }, "Both jobs done, each exactly once, and the work was shared. Taking the ticket <b>off the rail</b> is what makes it yours."],
+    ],
+  };
+  function reset() {
+    clearInterval(timer); i = 0;
+    st = { jobs: [{ id: 1, a: "ada@example.com", status: "queued", worker: "" }, { id: 2, a: "alan@example.com", status: "queued", worker: "" }], out: [] };
+    $("A").innerHTML = ""; $("B").innerHTML = ""; $("narr").innerHTML = "Ready. Two workers start at the same moment. Press <b>Step</b>."; render();
+  }
+  function render() {
+    $("rows").innerHTML = st.jobs.map(j => `<tr><td>${j.id}</td><td class="mono">${j.a}</td><td class="st-${j.status}">${j.status}</td><td>${j.worker}</td></tr>`).join("");
+    const dup = st.out.length > 1 && new Set(st.out.map(o => o.split("   ")[0].split("  ")[0])).size < st.out.length;
+    $("out").innerHTML = st.out.map(o => `<div>${esc(o)}</div>`).join("") || '<span class="muted">(empty)</span>';
+    if (dup) $("out").insertAdjacentHTML("beforeend", '<div style="margin-top:6px"><span class="pill bad">duplicate email!</span></div>');
+  }
+  function step() {
+    const sc = scripts[mode]; if (i >= sc.length) return false;
+    const [w, text, fn, narr, hot] = sc[i++]; fn(st);
+    el.querySelectorAll(".racelog li.new").forEach(x => x.classList.remove("new"));
+    $(w).insertAdjacentHTML("beforeend", `<li class="new ${hot ? "hot" : ""}">${esc(text)}</li>`);
+    $("narr").innerHTML = narr; render(); return i < sc.length;
+  }
+  seg($("mode"), v => { mode = v; reset(); });
+  el.addEventListener("click", e => {
+    const a = e.target.dataset.a; if (!a) return;
+    if (a === "step") step();
+    if (a === "reset") reset();
+    if (a === "play") { reset(); timer = setInterval(() => { if (!step()) clearInterval(timer); }, 1100); }
+  });
+  reset();
+}
+
+/* ===================== widget: backoff ===================== */
+function backoff(el) {
+  el.innerHTML = head("Play with it", "Exponential backoff and the thundering herd",
+    "A server goes down at t = 0 and every client's request fails. Each client retries 6 times with exponential backoff. The bars show how many retries hit the server in each quarter-second. Turn jitter on and off and watch the peaks.") + `
+    <div class="w-controls">
+      <label>clients <input type="range" min="10" max="300" value="100" data-k="n"><b data-o="n"></b></label>
+      <label>base <input type="range" min="1" max="20" value="5" data-k="base"><b data-o="base"></b></label>
+      <label>cap <input type="range" min="1" max="30" value="8" data-k="cap"><b data-o="cap"></b></label>
+      <span class="sep"></span>
+      <div class="seg" data-k="jit"><button data-v="none">No jitter</button><button class="on" data-v="half">Half jitter</button><button data-v="full">Full jitter</button></div>
+    </div>
+    <svg class="chart" viewBox="0 0 700 220" data-k="svg" role="img" aria-label="Retry arrivals over time"></svg>
+    <div class="stats"><div class="stat"><b data-s="peak"></b><span>peak retries in ¼ s</span></div><div class="stat"><b data-s="sched"></b><span>delays without jitter</span></div></div>
+    <p class="muted" style="margin:10px 0 0;font-size:12.5px">“Half jitter” waits a random amount between 50% and 100% of the delay (what our code does). “Full jitter” waits between 0 and 100%.</p>`;
+  const $ = k => el.querySelector(`[data-k="${k}"]`);
+  let jit = "half";
+  seg($("jit"), v => { jit = v; draw(); });
+  el.querySelectorAll("input").forEach(x => x.addEventListener("input", draw));
+  function draw() {
+    const n = +$("n").value, base = +$("base").value / 10, cap = +$("cap").value;
+    el.querySelector('[data-o="n"]').textContent = n; el.querySelector('[data-o="base"]').textContent = base.toFixed(1) + "s"; el.querySelector('[data-o="cap"]').textContent = cap + "s";
+    const r = rng(1234), times = [], sched = [];
+    for (let a = 1; a <= 6; a++) sched.push(Math.min(cap, base * 2 ** (a - 1)));
+    for (let c = 0; c < n; c++) {
+      let t = 0;
+      for (let a = 1; a <= 6; a++) {
+        const d = sched[a - 1];
+        t += jit === "none" ? d : jit === "half" ? d * (0.5 + r() / 2) : d * r();
+        times.push(t);
+      }
+    }
+    const horizon = Math.max(...times) * 1.04, B = 0.25, nb = Math.ceil(horizon / B), buckets = new Array(nb).fill(0);
+    times.forEach(t => buckets[Math.min(nb - 1, Math.floor(t / B))]++);
+    const peak = Math.max(...buckets);
+    const W = 700, H = 220, L = 34, Bt = 24, ph = H - Bt - 10, bw = (W - L - 6) / nb;
+    let s = `<line x1="${L}" y1="${H - Bt}" x2="${W}" y2="${H - Bt}" stroke="var(--line)"/>`;
+    s += `<text x="${L - 6}" y="16" text-anchor="end">${peak}</text><text x="${L - 6}" y="${H - Bt}" text-anchor="end">0</text>`;
+    buckets.forEach((v, k) => { const hgt = v / peak * ph; s += `<rect x="${L + k * bw}" y="${H - Bt - hgt}" width="${Math.max(1, bw - 1)}" height="${hgt}" rx="1" fill="${v > n * 0.5 ? "var(--bad)" : "var(--accent)"}" opacity=".85"/>`; });
+    const step = horizon > 40 ? 10 : horizon > 16 ? 4 : 2;
+    for (let t = 0; t <= horizon; t += step) s += `<text x="${L + t / B * bw}" y="${H - 6}" text-anchor="middle">${t}s</text>`;
+    $("svg").innerHTML = s;
+    el.querySelector('[data-s="peak"]').textContent = peak + (peak > n * 0.5 ? " 🔥" : "");
+    el.querySelector('[data-s="sched"]').textContent = sched.map(x => +x.toFixed(1)).join(", ");
+  }
+  draw();
+}
+
+/* ===================== widget: crash timeline ===================== */
+function crashTimeline(el) {
+  const S = {
+    amo: { name: "Ack, then work", steps: ["claim", "ACK (mark done)", "send email"], effect: 2, ack: 1 },
+    alo: { name: "Work, then ack", steps: ["claim", "send email", "ACK (mark done)"], effect: 1, ack: 2 },
+    key: { name: "Work with idempotency key, then ack", steps: ["claim", "send email, key=welcome:ada", "ACK (mark done)"], effect: 1, ack: 2, keyed: true },
+    txn: { name: "Effect + ack in one transaction", steps: ["claim", "BEGIN", "add 10 points", "mark done", "COMMIT"], effect: 4, ack: 4, txn: true },
+  };
+  el.innerHTML = head("Find the danger zone", "Where can a crash hurt you?",
+    "Pick a strategy, then click any ⚡ gap to crash the worker at that moment. A crashed job is retried by another worker once its lease expires. Count how many times the effect happens.") + `
+    <div class="w-controls"><div class="seg" data-k="s">${Object.entries(S).map(([k, v], i) => `<button data-v="${k}" class="${i === 1 ? "on" : ""}">${v.name}</button>`).join("")}</div></div>
+    <div class="tl" data-k="tl"></div><div class="verdict" data-k="v"></div>
+    <div class="truth" data-k="truth"></div>`;
+  const $ = k => el.querySelector(`[data-k="${k}"]`);
+  let cur = "alo", crashAt = null;
+  // crashAt = index c means: crash after steps[0..c-1] completed (c in 1..n-1); null = no crash
+  function outcome(s, c) {
+    const n = s.steps.length, completed = c == null ? n : c;
+    const firstEffect = s.txn ? completed >= n : completed > s.effect;
+    const acked = s.txn ? completed >= n : completed > s.ack;
+    let count = firstEffect ? 1 : 0;
+    if (!acked) { // retried, runs to completion
+      if (!(s.keyed && firstEffect)) count++;
+    }
+    return { count, acked, firstEffect, absorbed: !acked && s.keyed && firstEffect };
+  }
+  function label(o) { return o.count === 1 ? ["good", "✓ exactly once"] : o.count === 0 ? ["bad", "✗ LOST: never happened"] : ["bad", "✗ DUPLICATE: happened twice"]; }
+  function render() {
+    const s = S[cur], n = s.steps.length;
+    let html = "";
+    s.steps.forEach((st, k) => {
+      const ran = crashAt == null || k < crashAt;
+      html += `<div class="step ${ran ? "done" : "never"}">${k + 1}. ${esc(st)}</div>`;
+      if (k < n - 1) html += `<div class="gap ${crashAt === k + 1 ? "crash" : ""}" data-c="${k + 1}" title="crash here">⚡</div>`;
+    });
+    $("tl").innerHTML = html;
+    const o = outcome(s, crashAt), [cls, txt] = label(o);
+    let why;
+    if (crashAt == null) why = "No crash: every step runs, the effect happens once. Now click a ⚡ to crash.";
+    else if (s.txn) why = o.firstEffect ? "The transaction committed before the crash, so the job is done and is not retried." : "The crash happened before COMMIT, so the database rolled back <b>both</b> the points and the 'done' mark. The retry starts from a clean slate and does it once. There is no gap to fall into.";
+    else if (o.acked && !o.firstEffect) why = "The job was acked, so it is never retried, but the crash came before the email was sent. The work is silently <b>lost</b>. This is at-most-once.";
+    else if (o.absorbed) why = "The email was sent, the ack was not, so the job is retried. The retry sends the same key, the provider recognizes it, and does nothing. Duplicate <b>absorbed</b>.";
+    else if (!o.acked && o.firstEffect) why = "The email was sent but the ack was not recorded. The lease expires, another worker retries, and the email is sent <b>again</b>. This is the danger zone of at-least-once.";
+    else if (!o.acked) why = "Crashed before doing anything visible. The retry does the work for the first time. Harmless.";
+    else why = "The ack and the work both happened before the crash.";
+    $("v").className = "verdict " + cls; $("v").innerHTML = `<b>${txt}</b><br>${why}`;
+    let t = '<span class="muted">All crash points for this strategy:</span>';
+    for (let c = 1; c < n; c++) { const [k, x] = label(outcome(s, c)); t += `<span class="pill ${k}">after step ${c}: ${x.split(":")[0].replace("✗ ", "✗ ")}</span>`; }
+    $("truth").innerHTML = t;
+  }
+  seg($("s"), v => { cur = v; crashAt = null; render(); });
+  el.addEventListener("click", e => { const g = e.target.closest(".gap"); if (!g) return; const c = +g.dataset.c; crashAt = crashAt === c ? null : c; render(); });
+  render();
+}
+
+/* ===================== widget: idempotency (payments) ===================== */
+function payments(el) {
+  el.innerHTML = head("Simulate it", "100 customers, a flaky bank, and your retry policy",
+    "Each customer places one $10 order. The network loses some requests on the way in (nothing happens) and some replies on the way out (the charge <i>did</i> happen). Choose a policy and run it.") + `
+    <div class="w-controls">
+      <label>request lost <input type="range" min="0" max="50" value="20" data-k="pin"><b data-o="pin"></b></label>
+      <label>reply lost <input type="range" min="0" max="50" value="20" data-k="pout"><b data-o="pout"></b></label>
+    </div>
+    <div class="w-controls">
+      <div class="seg" data-k="pol">
+        <button data-v="once">No retries</button>
+        <button data-v="nokey">Retry, no key</button>
+        <button data-v="badkey">Retry, new key each try</button>
+        <button class="on" data-v="key">Retry, stable key</button>
+      </div>
+      <button class="btn primary" data-a="run">Run again ↻</button>
+    </div>
+    <div class="pgrid" data-k="grid"></div>
+    <div class="legend"><span><i style="background:var(--good)"></i>charged once</span><span><i style="background:var(--ink-faint)"></i>never charged (lost)</span><span><i style="background:var(--bad)"></i>charged 2+ times</span></div>
+    <div class="stats" data-k="stats"></div><div class="verdict" data-k="v"></div>`;
+  const $ = k => el.querySelector(`[data-k="${k}"]`);
+  let pol = "key", seed = 7;
+  seg($("pol"), v => { pol = v; run(); });
+  el.querySelectorAll("input").forEach(x => x.addEventListener("input", run));
+  el.addEventListener("click", e => { if (e.target.dataset.a === "run") { seed++; run(); } });
+  function run() {
+    const pin = +$("pin").value / 100, pout = +$("pout").value / 100, r = rng(seed * 7919);
+    el.querySelector('[data-o="pin"]').textContent = Math.round(pin * 100) + "%"; el.querySelector('[data-o="pout"]').textContent = Math.round(pout * 100) + "%";
+    const res = [];
+    let absorbed = 0, attemptsTotal = 0;
+    for (let c = 0; c < 100; c++) {
+      let charged = 0; const seen = new Set();
+      const maxA = pol === "once" ? 1 : 8;
+      for (let a = 1; a <= maxA; a++) {
+        attemptsTotal++;
+        const x = r();
+        if (x < pin) continue;                        // request lost
+        const key = pol === "key" ? "order-" + c : pol === "badkey" ? "order-" + c + "-try" + a : null;
+        if (key && seen.has(key)) absorbed++; else { charged++; if (key) seen.add(key); }
+        if (x < pin + pout) continue;                 // reply lost → we see a timeout
+        break;                                        // clean success
+      }
+      res.push(charged);
+    }
+    const lost = res.filter(x => x === 0).length, dup = res.filter(x => x > 1).length, ok = 100 - lost - dup;
+    const money = res.reduce((s, x) => s + x * 10, 0);
+    $("grid").innerHTML = res.map(x => `<i class="${x === 0 ? "lost" : x > 1 ? "dup" : ""}" title="${x} charge(s)"></i>`).join("");
+    $("stats").innerHTML = `<div class="stat good"><b>${ok}</b><span>charged once</span></div><div class="stat ${lost ? "bad" : ""}"><b>${lost}</b><span>never charged</span></div><div class="stat ${dup ? "bad" : ""}"><b>${dup}</b><span>double-charged</span></div><div class="stat"><b>$${money}</b><span>collected (should be $1000)</span></div><div class="stat"><b>${absorbed}</b><span>duplicates absorbed by key</span></div>`;
+    const msg = {
+      once: ["warn", "<b>At-most-once.</b> Never a duplicate, but every lost request is an order that is never paid for. (And every lost reply leaves you <i>believing</i> a charge failed when it actually went through.)"],
+      nokey: ["bad", "<b>At-least-once without idempotency.</b> Nobody is lost, but every lost <i>reply</i> leads to a retry of work that already happened. Customers are overcharged."],
+      badkey: ["bad", "<b>A key that changes on every attempt is no key at all.</b> The bank sees each retry as brand-new work. Same result as no key."],
+      key: ["good", "<b>At-least-once + idempotency = exactly-once effect.</b> Every customer is charged exactly once, no matter how flaky the network is. Retries whose work had already happened were recognized by their key and absorbed."],
+    }[pol];
+    $("v").className = "verdict " + msg[0]; $("v").innerHTML = msg[1];
+  }
+  run();
+}
+
+/* ===================== widget: queue simulator (lease-sim, chaos) ===================== */
+function queueSim(el, cfg) {
+  el.innerHTML = head(cfg.tag, cfg.title, cfg.intro) + `
+    <div class="w-controls">
+      <button class="btn primary" data-a="add">+ 6 signups</button>
+      ${cfg.showChaos ? `<label>chaos <input type="range" min="0" max="40" value="${cfg.chaos * 100}" data-k="chaos"><b data-o="chaos"></b></label>` : ""}
+      <label>lease <input type="range" min="5" max="60" value="${cfg.lease * 10}" data-k="lease"><b data-o="lease"></b></label>
+      <button class="btn ${cfg.leases ? "on" : ""}" data-a="leases">${cfg.leases ? "leases ON" : "leases OFF"}</button>
+      ${cfg.showKeys ? `<button class="btn ${cfg.keys ? "on" : ""}" data-a="keys">${cfg.keys ? "idempotency keys ON" : "idempotency keys OFF"}</button>` : ""}
+      <button class="btn" data-a="pause">Pause</button><button class="btn" data-a="reset">Reset</button>
+    </div>
+    <div class="sim">
+      <div class="col"><h5>Queue (jobs table)</h5><div class="jobchips" data-k="jobs"></div></div>
+      <div class="col"><h5>Workers</h5><div data-k="workers"></div></div>
+      <div class="col"><h5>Customer inboxes</h5><div class="inbox" data-k="inbox"></div></div>
+    </div>
+    <div class="stats" data-k="stats"></div>
+    <div class="events" data-k="ev"></div>`;
+  const $ = k => el.querySelector(`[data-k="${k}"]`);
+  const WORK = 2.0, ACK = 0.4, RESPAWN = 1.5, DT = 0.1;
+  let S, timer, paused = false;
+  const names = ["ada", "alan", "grace", "linus", "barbara", "ken", "edsger", "radia", "dennis", "frances", "john", "margaret", "tim", "katherine", "donald", "hedy", "guido", "shafi"];
+  function reset() {
+    S = { t: 0, jobs: [], workers: [], inbox: {}, keys: new Set(), absorbed: 0, crashes: 0, steals: 0, seq: 0, ev: [], tokenSeq: 0 };
+    for (let w = 0; w < cfg.workers; w++) S.workers.push({ id: "W" + (w + 1), alive: true, job: null });
+    add(cfg.initial); $("ev").innerHTML = ""; render();
+  }
+  function add(k) {
+    for (let i = 0; i < k; i++) { const nm = names[S.seq % names.length] + (S.seq >= names.length ? Math.floor(S.seq / names.length) + 1 : ""); S.seq++; S.jobs.push({ id: S.seq, who: nm, status: "queued", lease: 0, token: 0, attempts: 0 }); S.inbox[nm] = 0; }
+  }
+  function ev(msg, cls) { S.ev.unshift([S.t.toFixed(1), msg, cls || ""]); S.ev.length = Math.min(S.ev.length, 40); }
+  function claim(w) {
+    const j = S.jobs.find(j => j.status === "queued") || (cfg.leases && S.jobs.find(j => j.status === "running" && j.lease < S.t));
+    if (!j) return;
+    if (j.status === "running") { S.steals++; ev(`${w.id} takes over job ${j.id} (lease expired)`, ""); }
+    j.status = "running"; j.token = ++S.tokenSeq; j.attempts++; j.lease = cfg.leases ? S.t + cfg.lease : Infinity;
+    w.job = { j, token: j.token, prog: 0, phase: "work" };
+  }
+  function crash(w, why) {
+    if (!w.alive) return;
+    w.alive = false; w.diedAt = S.t; S.crashes++;
+    ev(`💥 ${w.id} crashed ${why}${w.job ? ` holding job ${w.job.j.id}` : ""}`, "bad");
+    w.lastJob = w.job ? w.job.j.id : null; w.job = null;
+  }
+  function deliver(j) {
+    const key = "welcome:" + j.who;
+    if (cfg.keys && S.keys.has(key)) { S.absorbed++; ev(`provider: already sent ${key}, ignoring`, "good"); return; }
+    S.keys.add(key); S.inbox[j.who]++;
+    if (S.inbox[j.who] > 1) ev(`✉ ${j.who} got a DUPLICATE welcome email`, "bad");
+  }
+  function tick() {
+    if (paused) return;
+    S.t += DT;
+    const chaos = cfg.showChaos ? +$("chaos").value / 100 : 0;
+    S.workers.forEach(w => {
+      if (!w.alive) { if (cfg.autoRestart && S.t - w.diedAt > RESPAWN) { w.alive = true; ev(`supervisor restarted ${w.id}`); } return; }
+      if (!w.job) { claim(w); return; }
+      if (chaos && Math.random() < chaos * DT) { crash(w, w.job.phase === "ack" ? "after sending, before ack" : "before sending"); return; }
+      const jb = w.job;
+      jb.prog += DT;
+      if (jb.phase === "work" && jb.prog >= WORK) { deliver(jb.j); jb.phase = "ack"; jb.prog = 0; }
+      else if (jb.phase === "ack" && jb.prog >= ACK) {
+        if (jb.j.token === jb.token) { jb.j.status = "done"; }
+        else ev(`${w.id} finished job ${jb.j.id} but lost its lease; another worker owns it`, "");
+        w.job = null;
+      }
+    });
+    render();
+  }
+  function render() {
+    if (cfg.showChaos) el.querySelector('[data-o="chaos"]').textContent = $("chaos").value + "%";
+    el.querySelector('[data-o="lease"]').textContent = cfg.lease.toFixed(1) + "s";
+    $("jobs").innerHTML = S.jobs.map(j => {
+      const stuck = j.status === "running" && !S.workers.some(w => w.alive && w.job && w.job.j === j);
+      return `<span class="chip ${stuck ? "stuck" : j.status}" title="attempts: ${j.attempts}">#${j.id} ${j.who}${j.status === "done" ? " ✓" : stuck ? (cfg.leases ? " ⏳" : " ☠") : ""}</span>`;
+    }).join("");
+    $("workers").innerHTML = S.workers.map(w => {
+      if (!w.alive) return `<div class="wcard dead"><div class="top"><b>${w.id}</b><span class="pill bad">dead</span></div><div class="sub">${cfg.autoRestart ? "supervisor will restart it…" : `<button class="btn" data-restart="${w.id}">Restart ${w.id}</button>`}</div></div>`;
+      const jb = w.job;
+      const leaseLeft = jb && isFinite(jb.j.lease) ? Math.max(0, jb.j.lease - S.t) : null;
+      const owner = jb && jb.j.token === jb.token;
+      return `<div class="wcard"><div class="top"><b>${w.id}</b>${jb ? `<span class="pill ${jb.phase === "ack" ? "warn" : "blue"}">${jb.phase === "work" ? "sending" : "sent → acking"}</span>` : '<span class="pill">idle</span>'}<button class="btn danger" data-kill="${w.id}" title="Pull the plug">💥</button></div>
+        <div class="sub">${jb ? `job #${jb.j.id} → ${jb.j.who}${owner ? "" : ' <span class="pill bad">lease lost</span>'}` : "waiting for a job"}</div>
+        ${jb ? `<div class="bar"><i style="width:${jb.phase === "work" ? jb.prog / WORK * 100 : 100}%"></i></div><div class="lease" title="lease remaining"><i style="width:${leaseLeft == null ? 100 : Math.min(100, leaseLeft / cfg.lease * 100)}%"></i></div>` : ""}</div>`;
+    }).join("");
+    $("inbox").innerHTML = Object.entries(S.inbox).map(([k, v]) => `<div class="${v === 1 ? "one" : v > 1 ? "many" : ""}"><span>${k}</span><b>${v}</b></div>`).join("");
+    const done = S.jobs.filter(j => j.status === "done").length;
+    const stuck = S.jobs.filter(j => j.status === "running" && !S.workers.some(w => w.alive && w.job && w.job.j === j)).length;
+    const dups = Object.values(S.inbox).reduce((s, v) => s + Math.max(0, v - 1), 0);
+    $("stats").innerHTML = `<div class="stat good"><b>${done}/${S.jobs.length}</b><span>jobs done</span></div><div class="stat ${stuck ? "bad" : ""}"><b>${stuck}</b><span>${cfg.leases ? "orphaned (awaiting lease)" : "stuck forever"}</span></div><div class="stat"><b>${S.crashes}</b><span>crashes</span></div><div class="stat"><b>${S.steals}</b><span>lease takeovers</span></div><div class="stat ${dups ? "bad" : ""}"><b>${dups}</b><span>duplicate emails</span></div>${cfg.showKeys ? `<div class="stat good"><b>${S.absorbed}</b><span>absorbed by keys</span></div>` : ""}`;
+    $("ev").innerHTML = S.ev.map(([t, m, c]) => `<div class="${c}">[${t}s] ${esc(m)}</div>`).join("") || '<div>events will appear here</div>';
+  }
+  el.addEventListener("click", e => {
+    const t = e.target, a = t.dataset.a;
+    if (t.dataset.kill) { const w = S.workers.find(w => w.id === t.dataset.kill); crash(w, w.job ? (w.job.phase === "ack" ? "after sending, before ack" : "before sending") : "while idle"); render(); }
+    if (t.dataset.restart) { const w = S.workers.find(w => w.id === t.dataset.restart); w.alive = true; ev(`you restarted ${w.id}`); render(); }
+    if (a === "add") { add(6); render(); }
+    if (a === "reset") reset();
+    if (a === "pause") { paused = !paused; t.textContent = paused ? "Resume" : "Pause"; t.classList.toggle("on", paused); }
+    if (a === "leases") { cfg.leases = !cfg.leases; t.classList.toggle("on", cfg.leases); t.textContent = cfg.leases ? "leases ON" : "leases OFF"; S.jobs.forEach(j => { if (j.status === "running") j.lease = cfg.leases ? S.t + cfg.lease : Infinity; }); render(); }
+    if (a === "keys") { cfg.keys = !cfg.keys; t.classList.toggle("on", cfg.keys); t.textContent = cfg.keys ? "idempotency keys ON" : "idempotency keys OFF"; }
+  });
+  $("lease").addEventListener("input", () => { cfg.lease = +$("lease").value / 10; render(); });
+  if (cfg.showChaos) $("chaos").addEventListener("input", render);
+  // only run while visible
+  const io = new IntersectionObserver(es => es.forEach(x => { clearInterval(timer); if (x.isIntersecting) timer = setInterval(tick, DT * 1000); }));
+  io.observe(el);
+  reset();
+}
+
+/* ===================== mount ===================== */
+const W = {
+  "waiter": waiter,
+  "job-anatomy": jobAnatomy,
+  "race": race,
+  "backoff": backoff,
+  "crash-timeline": crashTimeline,
+  "idempotency": payments,
+  "lease-sim": el => queueSim(el, {
+    tag: "Live simulation", title: "Kill a worker and watch the lease",
+    intro: "Two workers send welcome emails; each takes 2 s. Hit 💥 on a worker mid-job. With <b>leases OFF</b> its job is stuck forever (☠), like Grace in Exercise 4. Turn leases ON and the job is reclaimed after the lease runs out. Now kill a worker while it says <i>sent → acking</i> and check the inboxes. Finally, drag the lease below 2 s and watch healthy workers get mistaken for dead ones.",
+    workers: 2, initial: 6, leases: false, lease: 3, keys: false, showKeys: false, showChaos: false, chaos: 0, autoRestart: false }),
+  "chaos": el => queueSim(el, {
+    tag: "Chaos monkey", title: "Three workers, random crashes, a supervisor",
+    intro: "Workers crash at random; a supervisor restarts them. Leases reclaim orphaned jobs. Toggle <b>idempotency keys</b> off and watch duplicate emails pile up in the inboxes, then turn them back on and add more signups.",
+    workers: 3, initial: 12, leases: true, lease: 3, keys: true, showKeys: true, showChaos: true, chaos: 0.10, autoRestart: true }),
+};
+document.querySelectorAll("[data-widget]").forEach(el => {
+  el.classList.add("widget");
+  const f = W[el.dataset.widget];
+  if (f) try { f(el); } catch (e) { el.textContent = "Widget failed to load: " + e.message; }
+});
+})();
+</script>
+</body>
+</html>
